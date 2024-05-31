@@ -55,20 +55,34 @@ class DB:
         """Takes keyword args and returns the first row found in the users
         table as filtered by the method's inputed arguments.
         """
-        if not kwargs:
-            raise InvalidRequestError("No arguments provided")
-
-        for key in kwargs:
-            if not hasattr(User, key):
-                raise InvalidRequestError(f"Invalid attribute: {key}")
-
-        query = self._session.query(User)
+        fields, values = [], []
         for key, value in kwargs.items():
-            query = query.filter(getattr(User, key) == value)
+            if hasattr(User, key):
+                fields.append(getattr(User, key))
+                values.append(value)
+            else:
+                raise InvalidRequestError()
+        result = self._session.query(User).filter(
+            tuple_(*fields).in_([tuple(values)])
+        ).first()
+        if result is None:
+            raise NoResultFound()
+        return result
 
-        user = query.first()
+    def update_user(self, user_id: int, **kwargs) -> None:
+        """Updates a user based on a given id.
+        """
+        if not kwargs:
+            raise ValueError("No fields to update provided")
 
-        if user is None:
-            raise NoResultFound("No user found with the given criteria")
+        user = self.find_user_by(id=user_id)
 
-        return user
+        for key, value in kwargs.items():
+            if not hasattr(User, key):
+                raise ValueError(f"Invalid attribute: {key}")
+            setattr(user, key, value)
+
+        try:
+            self._session.commit()
+        except Exception as e:
+            self._session.rollback()
